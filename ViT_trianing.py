@@ -5,7 +5,8 @@ import os
 import numpy as np
 from torch.utils.data import WeightedRandomSampler
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
+
 
 # Create results directory
 results_dir = "./results"
@@ -44,13 +45,13 @@ print(f"Feature extractor loaded from {model_id}")
 def preprocess(batch):
     images = [img.convert('RGB') if img.mode != 'RGB' else img for img in batch['image']]
     inputs = feature_extractor(images, return_tensors='pt')
-    inputs['label'] = batch['label']
+    inputs['labels'] = batch['label']  # Change 'label' to 'labels'
     return inputs
 
 def collate_fn(batch):
     return {
         'pixel_values': torch.stack([x['pixel_values'] for x in batch]),
-        'labels': torch.tensor([x['label'] for x in batch])
+        'labels': torch.tensor([x['labels'] for x in batch])  # Change 'label' to 'labels'
     }
 
 # Prepare datasets
@@ -124,22 +125,23 @@ training_args = TrainingArguments(
     metric_for_best_model="accuracy",
 )
 
+# For the Trainer
 trainer = Trainer(
     model=model,
     args=training_args,
     data_collator=collate_fn,
     train_dataset=prepared_train,
-    eval_dataset=prepared_val,  # Using validation set instead of test
+    eval_dataset=prepared_val,
     tokenizer=feature_extractor,
-    compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.label_ids).mean()}
+    compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.labels).mean()}  # Change 'label_ids' to 'labels'
 )
 
 # Initial training
-if os.path.exists("./plantvillage_checkpoints"):
-    checkpoints = [dir for dir in os.listdir("./plantvillage_checkpoints") if dir.startswith("checkpoint-")]
+if os.path.exists("./plantvillage_model"):
+    checkpoints = [dir for dir in os.listdir("./plantvillage_model") if dir.startswith("checkpoint-")]
     if checkpoints:
         latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[1]))
-        checkpoint_path = os.path.join("./plantvillage_checkpoints", latest_checkpoint)
+        checkpoint_path = os.path.join("./plantvillage_model", latest_checkpoint)
         print(f"Resuming training from checkpoint: {checkpoint_path}")
         train_results = trainer.train(resume_from_checkpoint=checkpoint_path)
     else:
@@ -169,11 +171,21 @@ sampler = WeightedRandomSampler(
     replacement=True
 )
 
+
+class MyTrainer(Trainer):
+    def get_train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.args.train_batch_size,
+            sampler=sampler
+        )
+
+
 balanced_training_args = TrainingArguments(
     output_dir="./plantvillage_model_balanced",
     per_device_train_batch_size=16,
     evaluation_strategy="steps",
-    num_train_epochs=2,
+    num_train_epochs=3,
     save_steps=100,
     eval_steps=100,
     logging_steps=10,
@@ -185,14 +197,13 @@ balanced_training_args = TrainingArguments(
     metric_for_best_model="accuracy",
 )
 
-balanced_trainer = Trainer(
+balanced_trainer = MyTrainer(
     model=model,
     args=balanced_training_args,
     data_collator=collate_fn,
     train_dataset=prepared_train,
     eval_dataset=prepared_val,  # Using validation set instead of test
     tokenizer=feature_extractor,
-    train_sampler=sampler,
     compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.label_ids).mean()}
 )
 
