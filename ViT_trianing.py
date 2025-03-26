@@ -69,24 +69,30 @@ model = ViTForImageClassification.from_pretrained(
 )
 model.to(device)
 
-# Function to plot and save metrics
 def plot_and_save_metrics(trainer, model_name, phase="initial"):
     log_history = trainer.state.log_history
-    train_loss, val_loss = [], []
-    train_acc, val_acc = [], []
+    train_steps, train_loss = [], []
+    val_steps, val_loss = [], []
+    val_acc_steps, val_acc = [], []
     
+    # Extract steps and corresponding metrics
     for log in log_history:
-        if 'loss' in log:
-            train_loss.append(log['loss'])
-        if 'eval_loss' in log:
-            val_loss.append(log['eval_loss'])
-        if 'eval_accuracy' in log:
-            val_acc.append(log['eval_accuracy'])
+        if 'step' in log:
+            step = log['step']
+            if 'loss' in log:
+                train_steps.append(step)
+                train_loss.append(log['loss'])
+            if 'eval_loss' in log:
+                val_steps.append(step)
+                val_loss.append(log['eval_loss'])
+            if 'eval_accuracy' in log:
+                val_acc_steps.append(step)
+                val_acc.append(log['eval_accuracy'])
     
     # Plot loss
     plt.figure(figsize=(10, 6))
-    plt.plot(train_loss, label='Training Loss')
-    plt.plot(val_loss, label='Validation Loss')
+    plt.plot(train_steps, train_loss, label='Training Loss')
+    plt.plot(val_steps, val_loss, label='Validation Loss')
     plt.xlabel('Steps')
     plt.ylabel('Loss')
     plt.title(f'{model_name} - Loss Curves ({phase})')
@@ -97,7 +103,7 @@ def plot_and_save_metrics(trainer, model_name, phase="initial"):
     
     # Plot accuracy
     plt.figure(figsize=(10, 6))
-    plt.plot(val_acc, label='Validation Accuracy')
+    plt.plot(val_acc_steps, val_acc, label='Validation Accuracy')
     plt.xlabel('Steps')
     plt.ylabel('Accuracy')
     plt.title(f'{model_name} - Accuracy Curve ({phase})')

@@ -14,8 +14,8 @@ else:
     print(f"Directory already exists: {output_dir}")
 
 # Load the dataset
-dataset_train = load_dataset("imagefolder", "PlantVillage", split="train")
-dataset_test = load_dataset("imagefolder", "PlantVillage", split="test")
+dataset_train = load_dataset("imagefolder", data_dir="PlantVillage", split="train")
+dataset_test = load_dataset("imagefolder", data_dir="PlantVillage", split="test")    
 print(f"Train dataset loaded with {len(dataset_train)} samples")
 print(f"Test dataset loaded with {len(dataset_test)} samples")
 
@@ -52,19 +52,20 @@ else:
 print(f"Using device: {device}")
 
 # Load the teacher model
-teacher_path = "./plantvillage_final_model_balanced"
+teacher_path = "./plantvillage_final_model"
 teacher_model = ViTForImageClassification.from_pretrained(teacher_path)
 teacher_model.to(device)
 teacher_model.eval()
 print(f"Teacher model loaded from {teacher_path}")
 
 # Load the student model (smaller ViT variant)
-student_id = 'google/vit-tiny-patch16-224'
+student_id = 'WinKawaks/vit-tiny-patch16-224'
 student_model = ViTForImageClassification.from_pretrained(
     student_id,
     num_labels=len(dataset_train.features['label'].names),
     id2label={str(i): label for i, label in enumerate(dataset_train.features['label'].names)},
-    label2id={label: str(i) for i, label in enumerate(dataset_train.features['label'].names)}
+    label2id={label: str(i) for i, label in enumerate(dataset_train.features['label'].names)},
+    ignore_mismatched_sizes=True  # Added to handle classifier size mismatch
 )
 student_model.to(device)
 print(f"Student model initialized from {student_id}")
@@ -77,7 +78,7 @@ class DistillationTrainer(Trainer):
         self.temperature = 2.0  # Temperature for softening probabilities
         self.alpha = 0.5       # Weight for distillation loss vs. hard label loss
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         # Student outputs
         student_outputs = model(**inputs)
         student_logits = student_outputs.logits
@@ -106,13 +107,18 @@ distillation_args = TrainingArguments(
     output_dir="./distilled_model_output",
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    num_train_epochs=3,
-    eval_strategy="epoch",
-    save_strategy="epoch",
+    num_train_epochs=6,
+    eval_strategy="steps",
+    save_strategy="steps",
+    save_steps=100,
+    eval_steps=100,
     logging_steps=10,
     learning_rate=2e-4,
     save_total_limit=1,
+    remove_unused_columns=False,
+    push_to_hub=False,
     load_best_model_at_end=True,
+    metric_for_best_model="accuracy",
     remove_unused_columns=False,
 )
 
@@ -124,7 +130,8 @@ distillation_trainer = DistillationTrainer(
     train_dataset=prepared_train,
     eval_dataset=prepared_test,
     data_collator=collate_fn,
-    tokenizer=feature_extractor,
+    processing_class=feature_extractor,
+    compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.label_ids).mean()}
 )
 
 # Train the student model
@@ -132,70 +139,53 @@ print("Starting knowledge distillation...")
 distillation_trainer.train()
 print("Distillation training completed")
 
-# Function to get model size in MB
-def get_model_size(model, model_name="model"):
-    torch.save(model.state_dict(), f"{model_name}.pt")
-    size_mb = os.path.getsize(f"{model_name}.pt") / (1024 * 1024)  # Convert to MB
-    os.remove(f"{model_name}.pt")
-    return size_mb
+results_dir = "./results_distillation"
+if not os.path.exists(results_dir):
+    os.makedirs(results_dir)
+    
 
-# Evaluate models
-def evaluate_model(model):
-    trainer = Trainer(
-        model=model,
-        args=distillation_args,
-        data_collator=collate_fn,
-        eval_dataset=prepared_test,
-        tokenizer=feature_extractor,
-    )
-    eval_results = trainer.evaluate()
-    return eval_results['eval_accuracy']
+def plot_and_save_metrics(trainer, model_name, phase="initial"):
+    log_history = trainer.state.log_history
+    train_steps, train_loss = [], []
+    val_steps, val_loss = [], []
+    val_acc_steps, val_acc = [], []
+    
+    # Extract steps and corresponding metrics
+    for log in log_history:
+        if 'step' in log:
+            step = log['step']
+            if 'loss' in log:
+                train_steps.append(step)
+                train_loss.append(log['loss'])
+            if 'eval_loss' in log:
+                val_steps.append(step)
+                val_loss.append(log['eval_loss'])
+            if 'eval_accuracy' in log:
+                val_acc_steps.append(step)
+                val_acc.append(log['eval_accuracy'])
+    
+    # Plot loss
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_steps, train_loss, label='Training Loss')
+    plt.plot(val_steps, val_loss, label='Validation Loss')
+    plt.xlabel('Steps')
+    plt.ylabel('Loss')
+    plt.title(f'{model_name} - Loss Curves ({phase})')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(results_dir, f'{model_name}_loss_{phase}.png'))
+    plt.close()
+    
+    # Plot accuracy
+    plt.figure(figsize=(10, 6))
+    plt.plot(val_acc_steps, val_acc, label='Validation Accuracy')
+    plt.xlabel('Steps')
+    plt.ylabel('Accuracy')
+    plt.title(f'{model_name} - Accuracy Curve ({phase})')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(results_dir, f'{model_name}_accuracy_{phase}.png'))
+    plt.close()
 
-# Evaluate teacher and student
-print("Evaluating teacher model...")
-teacher_accuracy = evaluate_model(teacher_model)
-teacher_size = get_model_size(teacher_model, "teacher_model")
 
-print("Evaluating student model...")
-student_accuracy = evaluate_model(student_model)
-student_size = get_model_size(student_model, "student_model")
-
-# Save the student model
-student_save_path = os.path.join(output_dir, "student_model")
-student_model.save_pretrained(student_save_path)
-print(f"Student model saved to {student_save_path}")
-
-# Store results
-models = ["Teacher (ViT-Base)", "Student (ViT-Tiny)"]
-accuracies = [teacher_accuracy, student_accuracy]
-sizes = [teacher_size, student_size]
-
-# Print results
-print("\nDistillation Results:")
-print(f"{'Model':<20} {'Accuracy':<10} {'Size (MB)':<10}")
-print("-" * 40)
-for model_name, acc, size in zip(models, accuracies, sizes):
-    print(f"{model_name:<20} {acc:<10.4f} {size:<10.2f}")
-
-# Write results to file
-with open("distillation_results.txt", "w") as f:
-    f.write("Distillation Results:\n")
-    f.write(f"{'Model':<20} {'Accuracy':<10} {'Size (MB)':<10}\n")
-    f.write("-" * 40 + "\n")
-    for model_name, acc, size in zip(models, accuracies, sizes):
-        f.write(f"{model_name:<20} {acc:<10.4f} {size:<10.2f}\n")
-print("Results written to distillation_results.txt")
-
-# Plot Accuracy vs Size
-plt.figure(figsize=(8, 6))
-plt.scatter(sizes, accuracies, color='blue', label='Model Comparison')
-for i, model_name in enumerate(models):
-    plt.annotate(model_name, (sizes[i], accuracies[i]), xytext=(5, 5), textcoords='offset points')
-plt.xlabel("Model Size (MB)")
-plt.ylabel("Accuracy")
-plt.title("Accuracy vs Model Size: Teacher vs Student")
-plt.grid(True)
-plt.legend()
-plt.savefig("distillation_plot.png")
-plt.show()
-print("Plot saved as distillation_plot.png")
+plot_and_save_metrics(distillation_trainer, model_name="soft distillation")

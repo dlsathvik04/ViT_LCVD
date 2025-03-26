@@ -14,8 +14,8 @@ else:
     print(f"Directory already exists: {output_dir}")
 
 # Load the dataset
-dataset_train = load_dataset("imagefolder", "PlantVillage", split="train")
-dataset_test = load_dataset("imagefolder", "PlantVillage", split="test")
+dataset_train = load_dataset("imagefolder", data_dir="PlantVillage", split="train")
+dataset_test = load_dataset("imagefolder", data_dir="PlantVillage", split="test")    
 print(f"Train dataset loaded with {len(dataset_train)} samples")
 print(f"Test dataset loaded with {len(dataset_test)} samples")
 
@@ -52,19 +52,20 @@ else:
 print(f"Using device: {device}")
 
 # Load the teacher model
-teacher_path = "./plantvillage_final_model_balanced"
+teacher_path = "./plantvillage_final_model"
 teacher_model = ViTForImageClassification.from_pretrained(teacher_path)
 teacher_model.to(device)
 teacher_model.eval()
 print(f"Teacher model loaded from {teacher_path}")
 
 # Load the student model (smaller ViT variant)
-student_id = 'google/vit-tiny-patch16-224'
+student_id = 'WinKawaks/vit-tiny-patch16-224'
 student_model = ViTForImageClassification.from_pretrained(
     student_id,
     num_labels=len(dataset_train.features['label'].names),
     id2label={str(i): label for i, label in enumerate(dataset_train.features['label'].names)},
-    label2id={label: str(i) for i, label in enumerate(dataset_train.features['label'].names)}
+    label2id={label: str(i) for i, label in enumerate(dataset_train.features['label'].names)},
+    ignore_mismatched_sizes=True  # Added to handle classifier size mismatch
 )
 student_model.to(device)
 print(f"Student model initialized from {student_id}")
@@ -74,7 +75,6 @@ class DistillationTrainer(Trainer):
     def __init__(self, teacher_model, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.teacher = teacher_model
-        self.temperature = 2.0  # Temperature for softening probabilities
         self.alpha = 0.5       # Weight for distillation loss vs. hard label loss
 
     def compute_loss(self, model, inputs, return_outputs=False):
@@ -86,13 +86,11 @@ class DistillationTrainer(Trainer):
         with torch.no_grad():
             teacher_outputs = self.teacher(**inputs)
             teacher_logits = teacher_outputs.logits
+            # Get teacher's hard predictions
+            teacher_predictions = torch.argmax(teacher_logits, dim=-1)
 
-        # Softmax with temperature
-        student_soft = torch.nn.functional.log_softmax(student_logits / self.temperature, dim=-1)
-        teacher_soft = torch.nn.functional.softmax(teacher_logits / self.temperature, dim=-1)
-
-        # Distillation loss (KL divergence)
-        distillation_loss = torch.nn.functional.kl_div(student_soft, teacher_soft, reduction='batchmean') * (self.temperature ** 2)
+        # Cross-entropy loss with teacher's hard predictions
+        distillation_loss = torch.nn.functional.cross_entropy(student_logits, teacher_predictions)
 
         # Original classification loss
         classification_loss = student_outputs.loss
@@ -106,7 +104,7 @@ distillation_args = TrainingArguments(
     output_dir="./distilled_model_output",
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    num_train_epochs=3,
+    num_train_epochs=6,
     eval_strategy="epoch",
     save_strategy="epoch",
     logging_steps=10,
@@ -124,7 +122,7 @@ distillation_trainer = DistillationTrainer(
     train_dataset=prepared_train,
     eval_dataset=prepared_test,
     data_collator=collate_fn,
-    tokenizer=feature_extractor,
+    processing_class=feature_extractor,  # Changed from tokenizer=feature_extractor
 )
 
 # Train the student model
