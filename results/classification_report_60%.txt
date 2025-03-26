@@ -1,0 +1,26 @@
+Pruning Level: 60%
+Accuracy: 0.9479
+
+                                     precision    recall  f1-score   support
+
+                00 Chilli - Healthy       1.00      0.57      0.72        23
+        01 Chilli - Leaf Curl Virus       0.78      1.00      0.88        35
+    02 Pepper Bell - Bacterial Spot       0.97      0.94      0.96        35
+           03 Pepper Bell - Healthy       1.00      0.91      0.96        35
+           04 Potato - Early Blight       1.00      0.97      0.99        35
+                05 Potato - Healthy       0.92      0.82      0.87        28
+            06 Potato - Late Blight       1.00      0.77      0.87        35
+         07 Tomato - Bacterial Spot       1.00      1.00      1.00        35
+           08 Tomato - Early Blight       0.95      1.00      0.97        35
+                09 Tomato - Healthy       1.00      1.00      1.00        35
+            10 Tomato - Late Blight       0.88      1.00      0.93        35
+              11 Tomato - Leaf Mold       1.00      1.00      1.00        35
+           12 Tomato - Mosaic Virus       1.00      1.00      1.00        35
+     13 Tomato - Septoria Leaf Spot       0.90      1.00      0.95        35
+            14 Tomato - Target Spot       0.92      0.97      0.94        35
+15 Tomato - Two Spotted Spider Mite       0.95      1.00      0.97        35
+ 16 Tomato - Yellow Leaf Curl Virus       0.97      1.00      0.99        35
+
+                           accuracy                           0.95       576
+                          macro avg       0.95      0.94      0.94       576
+                       weighted avg       0.95      0.95      0.95       576

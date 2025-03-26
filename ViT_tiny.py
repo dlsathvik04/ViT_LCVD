@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 results_dir = "./results_tiny"
 os.makedirs(results_dir, exist_ok=True)
 
-# Model id to be used
-model_id = 'google/vit-tiny-patch16-224'
+# Model id to be used (smallest valid ViT model)
+model_id = 'WinKawaks/vit-tiny-patch16-224'
 print(f"Model ID selected: {model_id}")
 
 # Device setup
@@ -22,7 +22,6 @@ elif torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 print(f"Using device: {device}")
-
 
 # Load predefined train and test splits
 train_dataset = load_dataset("imagefolder", data_dir="PlantVillage", split="train")
@@ -36,7 +35,6 @@ val_dataset = train_val_split['test']
 print(f"Training dataset: {len(train_dataset)} samples")
 print(f"Validation dataset: {len(val_dataset)} samples")
 print(f"Test dataset: {len(test_dataset)} samples")
-
 
 # Feature extractor
 feature_extractor = ViTImageProcessor.from_pretrained(model_id, ignore_mismatched_sizes=True)
@@ -64,10 +62,10 @@ labels = train_dataset.features['label'].names
 # Initialize model
 model = ViTForImageClassification.from_pretrained(
     model_id,
-    ignore_mismatched_sizes=True,
     num_labels=len(labels),
     id2label={str(i): label for i, label in enumerate(labels)},
-    label2id={label: str(i) for i, label in enumerate(labels)}
+    label2id={label: str(i) for i, label in enumerate(labels)},
+    ignore_mismatched_sizes=True  # Handle potential size mismatches
 )
 model.to(device)
 
@@ -111,9 +109,9 @@ def plot_and_save_metrics(trainer, model_name, phase="initial"):
 # Initial training setup
 training_args = TrainingArguments(
     output_dir="./plantvillage_model_tiny",
-    per_device_train_batch_size=32,  # Increased batch size for tiny model
-    evaluation_strategy="steps",
-    num_train_epochs=3,
+    per_device_train_batch_size=32,
+    eval_strategy="steps",
+    num_train_epochs=1,
     save_steps=100,
     eval_steps=100,
     logging_steps=10,
@@ -136,7 +134,7 @@ trainer = Trainer(
 )
 
 # Initial training
-checkpoint_dir = "./plantvillage_checkpoints_tiny"
+checkpoint_dir = "./plantvillage_model_tiny"
 if os.path.exists(checkpoint_dir):
     checkpoints = [dir for dir in os.listdir(checkpoint_dir) if dir.startswith("checkpoint-")]
     if checkpoints:
@@ -159,23 +157,31 @@ trainer.save_state()
 plot_and_save_metrics(trainer, model_id.split('/')[-1], "initial")
 print("Initial training completed and model saved")
 
+
+
+class CustomTrainer(Trainer):
+    def __init__(self, sample_weights, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sample_weights = sample_weights
+
+    def _get_train_sampler(self):
+        return WeightedRandomSampler(
+            weights=self.sample_weights,
+            num_samples=len(self.train_dataset),
+            replacement=True
+        )
+
 # Balanced retraining
 print("Starting balanced retraining...")
 class_counts = np.bincount(train_dataset['label'])
 class_weights = 1.0 / class_counts
 sample_weights = torch.DoubleTensor([class_weights[label] for label in train_dataset['label']])
 
-sampler = WeightedRandomSampler(
-    weights=sample_weights,
-    num_samples=len(train_dataset),
-    replacement=True
-)
-
 balanced_training_args = TrainingArguments(
     output_dir="./plantvillage_model_tiny_balanced",
-    per_device_train_batch_size=32,  # Increased batch size for tiny model
-    evaluation_strategy="steps",
-    num_train_epochs=2,
+    per_device_train_batch_size=32,
+    eval_strategy="steps",  # Changed from evaluation_strategy
+    num_train_epochs=1,
     save_steps=100,
     eval_steps=100,
     logging_steps=10,
@@ -187,14 +193,14 @@ balanced_training_args = TrainingArguments(
     metric_for_best_model="accuracy",
 )
 
-balanced_trainer = Trainer(
+balanced_trainer = CustomTrainer(
+    sample_weights=sample_weights,
     model=model,
     args=balanced_training_args,
     data_collator=collate_fn,
     train_dataset=prepared_train,
     eval_dataset=prepared_val,
-    tokenizer=feature_extractor,
-    train_sampler=sampler,
+    processing_class=feature_extractor,  # Changed from tokenizer
     compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.label_ids).mean()}
 )
 

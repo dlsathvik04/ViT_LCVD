@@ -5,8 +5,6 @@ import os
 import numpy as np
 from torch.utils.data import WeightedRandomSampler
 import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-
 
 # Create results directory
 results_dir = "./results"
@@ -45,13 +43,13 @@ print(f"Feature extractor loaded from {model_id}")
 def preprocess(batch):
     images = [img.convert('RGB') if img.mode != 'RGB' else img for img in batch['image']]
     inputs = feature_extractor(images, return_tensors='pt')
-    inputs['labels'] = batch['label']  # Change 'label' to 'labels'
+    inputs['label'] = batch['label']
     return inputs
 
 def collate_fn(batch):
     return {
         'pixel_values': torch.stack([x['pixel_values'] for x in batch]),
-        'labels': torch.tensor([x['labels'] for x in batch])  # Change 'label' to 'labels'
+        'labels': torch.tensor([x['label'] for x in batch])
     }
 
 # Prepare datasets
@@ -111,9 +109,9 @@ def plot_and_save_metrics(trainer, model_name, phase="initial"):
 # Initial training setup
 training_args = TrainingArguments(
     output_dir="./plantvillage_model",
-    per_device_train_batch_size=16,
-    evaluation_strategy="steps",
-    num_train_epochs=3,
+    per_device_train_batch_size=32,
+    eval_strategy="steps",
+    num_train_epochs=1,
     save_steps=100,
     eval_steps=100,
     logging_steps=10,
@@ -133,15 +131,16 @@ trainer = Trainer(
     train_dataset=prepared_train,
     eval_dataset=prepared_val,
     tokenizer=feature_extractor,
-    compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.labels).mean()}  # Change 'label_ids' to 'labels'
+    compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.label_ids).mean()}
 )
 
 # Initial training
-if os.path.exists("./plantvillage_model"):
-    checkpoints = [dir for dir in os.listdir("./plantvillage_model") if dir.startswith("checkpoint-")]
+checkpoint_dir = "./plantvillage_model"
+if os.path.exists(checkpoint_dir):
+    checkpoints = [dir for dir in os.listdir(checkpoint_dir) if dir.startswith("checkpoint-")]
     if checkpoints:
         latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[1]))
-        checkpoint_path = os.path.join("./plantvillage_model", latest_checkpoint)
+        checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
         print(f"Resuming training from checkpoint: {checkpoint_path}")
         train_results = trainer.train(resume_from_checkpoint=checkpoint_path)
     else:
@@ -159,33 +158,29 @@ trainer.save_state()
 plot_and_save_metrics(trainer, model_id.split('/')[-1], "initial")
 print("Initial training completed and model saved")
 
+class CustomTrainer(Trainer):
+    def __init__(self, sample_weights, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sample_weights = sample_weights
+
+    def _get_train_sampler(self):
+        return WeightedRandomSampler(
+            weights=self.sample_weights,
+            num_samples=len(self.train_dataset),
+            replacement=True
+        )
+
 # Balanced retraining
 print("Starting balanced retraining...")
 class_counts = np.bincount(train_dataset['label'])
 class_weights = 1.0 / class_counts
 sample_weights = torch.DoubleTensor([class_weights[label] for label in train_dataset['label']])
 
-sampler = WeightedRandomSampler(
-    weights=sample_weights,
-    num_samples=len(train_dataset),
-    replacement=True
-)
-
-
-class MyTrainer(Trainer):
-    def get_train_dataloader(self):
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.args.train_batch_size,
-            sampler=sampler
-        )
-
-
 balanced_training_args = TrainingArguments(
     output_dir="./plantvillage_model_balanced",
-    per_device_train_batch_size=16,
-    evaluation_strategy="steps",
-    num_train_epochs=3,
+    per_device_train_batch_size=32,
+    eval_strategy="steps",  # Changed from evaluation_strategy
+    num_train_epochs=1,
     save_steps=100,
     eval_steps=100,
     logging_steps=10,
@@ -197,13 +192,14 @@ balanced_training_args = TrainingArguments(
     metric_for_best_model="accuracy",
 )
 
-balanced_trainer = MyTrainer(
+balanced_trainer = CustomTrainer(
+    sample_weights=sample_weights,
     model=model,
     args=balanced_training_args,
     data_collator=collate_fn,
     train_dataset=prepared_train,
-    eval_dataset=prepared_val,  # Using validation set instead of test
-    tokenizer=feature_extractor,
+    eval_dataset=prepared_val,
+    processing_class=feature_extractor,  # Changed from tokenizer
     compute_metrics=lambda p: {"accuracy": (p.predictions.argmax(1) == p.label_ids).mean()}
 )
 

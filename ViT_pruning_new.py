@@ -46,14 +46,15 @@ def get_predictions(model, dataset):
     
     return true_labels, pred_labels
 
-# Function to get model size in MB
+# Function to get model size in MB with sparsity
 def get_model_size(model, model_name="model"):
-    torch.save(model.state_dict(), f"{model_name}.pt")
+    state_dict = model.state_dict()
+    torch.save(state_dict, f"{model_name}.pt")
     size_mb = os.path.getsize(f"{model_name}.pt") / (1024 * 1024)
     os.remove(f"{model_name}.pt")
     return size_mb
 
-# Function to apply pruning and make it permanent
+# Function to apply pruning and convert to sparse
 def apply_pruning(model, amount):
     pruned_model = ViTForImageClassification.from_pretrained(model_path)
     pruned_model.to(device)
@@ -64,13 +65,19 @@ def apply_pruning(model, amount):
         if isinstance(module, torch.nn.Linear):
             prune.l1_unstructured(module, name='weight', amount=amount)
     
-    # Make pruning permanent by removing the mask and pruned weights
+    # Make pruning permanent and convert to sparse
     for name, module in pruned_model.named_modules():
         if isinstance(module, torch.nn.Linear):
             try:
-                prune.remove(module, 'weight')  # Permanently applies the pruning
+                prune.remove(module, 'weight')  # Permanently applies pruning
+                # Convert to sparse and update the parameter
+                sparse_weight = module.weight.data.to_sparse()
+                module.weight = torch.nn.Parameter(sparse_weight)
+                # Ensure bias remains dense (not pruned)
+                if module.bias is not None and module.bias.is_sparse:
+                    module.bias = torch.nn.Parameter(module.bias.data.to_dense())
             except ValueError:
-                pass  # Skip if no pruning was applied to this module
+                pass
     
     return pruned_model
 
@@ -120,7 +127,7 @@ for level, amount in zip(pruning_levels, pruning_amounts):
     plt.close()
     print(f"Confusion matrix saved to {cm_path}")
     
-    # Save the pruned model
+    # Save the pruned model with sparse weights
     save_path = os.path.join(output_dir, f"model_pruned_{amount}")
     pruned_model.save_pretrained(save_path)
     print(f"Pruned model ({level}) saved to {save_path}")

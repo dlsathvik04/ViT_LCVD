@@ -1,0 +1,6 @@
+Quantization Results:
+Level           Accuracy   Size (MB) 
+-----------------------------------
+FP32 (Original) 0.9896     327.42    
+FP16            0.9896     163.75    
+INT8            0.9896     84.44

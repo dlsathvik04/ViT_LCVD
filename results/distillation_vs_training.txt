@@ -1,0 +1,78 @@
+Distillation model Classification report : =====================
+                                    precision    recall  f1-score   support
+
+                00 Chilli - Healthy       0.95      0.78      0.86        23
+        01 Chilli - Leaf Curl Virus       0.87      0.97      0.92        35
+    02 Pepper Bell - Bacterial Spot       1.00      1.00      1.00        35
+           03 Pepper Bell - Healthy       1.00      1.00      1.00        35
+           04 Potato - Early Blight       1.00      1.00      1.00        35
+                05 Potato - Healthy       0.97      1.00      0.98        28
+            06 Potato - Late Blight       1.00      0.97      0.99        35
+         07 Tomato - Bacterial Spot       1.00      1.00      1.00        35
+           08 Tomato - Early Blight       1.00      1.00      1.00        35
+                09 Tomato - Healthy       1.00      1.00      1.00        35
+            10 Tomato - Late Blight       1.00      1.00      1.00        35
+              11 Tomato - Leaf Mold       1.00      1.00      1.00        35
+           12 Tomato - Mosaic Virus       1.00      1.00      1.00        35
+     13 Tomato - Septoria Leaf Spot       1.00      1.00      1.00        35
+            14 Tomato - Target Spot       1.00      1.00      1.00        35
+15 Tomato - Two Spotted Spider Mite       1.00      1.00      1.00        35
+ 16 Tomato - Yellow Leaf Curl Virus       1.00      1.00      1.00        35
+
+                           accuracy                           0.99       576
+                          macro avg       0.99      0.98      0.98       576
+                       weighted avg       0.99      0.99      0.99       576
+
+
+Direct Training Classification report : =====================
+
+                                     precision    recall  f1-score   support
+
+                00 Chilli - Healthy       1.00      0.65      0.79        23
+        01 Chilli - Leaf Curl Virus       0.81      1.00      0.90        35
+    02 Pepper Bell - Bacterial Spot       1.00      1.00      1.00        35
+           03 Pepper Bell - Healthy       1.00      1.00      1.00        35
+           04 Potato - Early Blight       1.00      1.00      1.00        35
+                05 Potato - Healthy       0.93      1.00      0.97        28
+            06 Potato - Late Blight       1.00      0.94      0.97        35
+         07 Tomato - Bacterial Spot       1.00      1.00      1.00        35
+           08 Tomato - Early Blight       1.00      1.00      1.00        35
+                09 Tomato - Healthy       1.00      1.00      1.00        35
+            10 Tomato - Late Blight       1.00      1.00      1.00        35
+              11 Tomato - Leaf Mold       1.00      1.00      1.00        35
+           12 Tomato - Mosaic Virus       1.00      1.00      1.00        35
+     13 Tomato - Septoria Leaf Spot       0.97      1.00      0.99        35
+            14 Tomato - Target Spot       1.00      0.97      0.99        35
+15 Tomato - Two Spotted Spider Mite       1.00      1.00      1.00        35
+ 16 Tomato - Yellow Leaf Curl Virus       1.00      1.00      1.00        35
+
+                           accuracy                           0.98       576
+                          macro avg       0.98      0.97      0.98       576
+                       weighted avg       0.98      0.98      0.98       576
+
+
+Parent or Original model Classification report : =====================
+
+                                     precision    recall  f1-score   support
+
+                00 Chilli - Healthy       0.95      0.87      0.91        23
+        01 Chilli - Leaf Curl Virus       0.92      0.97      0.94        35
+    02 Pepper Bell - Bacterial Spot       1.00      1.00      1.00        35
+           03 Pepper Bell - Healthy       1.00      1.00      1.00        35
+           04 Potato - Early Blight       0.97      1.00      0.99        35
+                05 Potato - Healthy       0.97      1.00      0.98        28
+            06 Potato - Late Blight       1.00      0.97      0.99        35
+         07 Tomato - Bacterial Spot       1.00      1.00      1.00        35
+           08 Tomato - Early Blight       1.00      0.97      0.99        35
+                09 Tomato - Healthy       1.00      1.00      1.00        35
+            10 Tomato - Late Blight       1.00      1.00      1.00        35
+              11 Tomato - Leaf Mold       1.00      1.00      1.00        35
+           12 Tomato - Mosaic Virus       1.00      1.00      1.00        35
+     13 Tomato - Septoria Leaf Spot       1.00      1.00      1.00        35
+            14 Tomato - Target Spot       1.00      1.00      1.00        35
+15 Tomato - Two Spotted Spider Mite       1.00      1.00      1.00        35
+ 16 Tomato - Yellow Leaf Curl Virus       1.00      1.00      1.00        35
+
+                           accuracy                           0.99       576
+                          macro avg       0.99      0.99      0.99       576
+                       weighted avg       0.99      0.99      0.99       576
