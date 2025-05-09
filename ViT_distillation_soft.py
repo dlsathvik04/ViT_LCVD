@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Create distilled_models directory if it doesn't exist
-output_dir = "./distilled_models"
+output_dir = "./distilled_models_soft"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
     print(f"Created directory: {output_dir}")
@@ -104,7 +104,7 @@ class DistillationTrainer(Trainer):
 
 # Training arguments for distillation
 distillation_args = TrainingArguments(
-    output_dir="./distilled_model_output",
+    output_dir="./soft_distilled_model_output",
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
     num_train_epochs=6,
@@ -139,7 +139,7 @@ print("Starting knowledge distillation...")
 distillation_trainer.train()
 print("Distillation training completed")
 
-results_dir = "./results_distillation"
+results_dir = "./results_distillation_soft"
 if not os.path.exists(results_dir):
     os.makedirs(results_dir)
     

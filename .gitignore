@@ -16,3 +16,4 @@ plantvillage_final_model.zip
 plantvillage_final_model.zip
 distilled_model_final
 best_models
+*.onnx
